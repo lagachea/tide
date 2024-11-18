@@ -121,6 +121,8 @@ while current_date <= end_date:
 
         tide_dics.extend(day)
         current_date += delta
+    # remove the 7 first elements consumed by last loop
+    sun_times = sun_times[6:]
     print(current_date)
 
 
