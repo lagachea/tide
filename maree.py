@@ -27,7 +27,7 @@ def get_sun_times(start, end):
     }
 
     # get the sunrise and sunset time
-    timeurl = f"https://api.sunrisesunset.io/json?"
+    timeurl = "https://api.sunrisesunset.io/json"
     response = requests.get(timeurl, params=params)
     res = json.loads(response.content)
     return res["results"]
@@ -55,7 +55,7 @@ current_date = start_date
 while current_date <= end_date:
     # Récupérer la page web pour le jour actuel (URL et méthode d'accès à ajuster selon le site)
     tide_params = {"d": current_date.strftime("%Y%m%d")}
-    tide_url = f"https://maree.info/150"
+    tide_url = "https://maree.info/150"
     response = requests.get(tide_url, headers=headers, params=tide_params)
 
     soup = BeautifulSoup(response.content, "html.parser")
@@ -67,9 +67,7 @@ while current_date <= end_date:
     # handle Changement d heure (ignore la ligne)
     if len(df_html_table.values) > 7:
         df_html_table.drop(
-            df_html_table[
-                df_html_table["Date"].str.contains("Changement") == True
-            ].index,
+            df_html_table[df_html_table["Date"].str.contains("Changement")].index,
             inplace=True,
         )
 
@@ -129,6 +127,7 @@ while current_date <= end_date:
 # Exporter vers Excel
 df = pd.DataFrame(tide_dics)
 # print(df)
+
 
 def get_minutes_from_time(time):
     hours = int(time[:2])
