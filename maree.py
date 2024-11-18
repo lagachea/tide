@@ -39,7 +39,7 @@ with open("cookie.txt", "r") as cookietxt:
     cookie = cookietxt.read()[:-1]
 
 # Set headers manually
-headers = {
+tide_headers = {
     "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.5",
@@ -56,7 +56,7 @@ while current_date <= end_date:
     # Récupérer la page web pour le jour actuel (URL et méthode d'accès à ajuster selon le site)
     tide_params = {"d": current_date.strftime("%Y%m%d")}
     tide_url = "https://maree.info/150"
-    response = requests.get(tide_url, headers=headers, params=tide_params)
+    response = requests.get(tide_url, headers=tide_headers, params=tide_params)
 
     soup = BeautifulSoup(response.content, "html.parser")
 
@@ -64,7 +64,7 @@ while current_date <= end_date:
         string_table = StringIO(str(tide))
         df_html_table = pd.read_html(string_table)[0]
 
-    # handle Changement d heure (ignore la ligne)
+    # handle week with "Changement d'heure" ignore the row
     if len(df_html_table.values) > 7:
         df_html_table.drop(
             df_html_table[df_html_table["Date"].str.contains("Changement")].index,
@@ -130,44 +130,53 @@ df = pd.DataFrame(tide_dics)
 
 
 def get_minutes_from_time(time):
+    """
+    inputs
+    time is a string hh:mm
+    ouputs
+    the number of minutes in time
+    """
     hours = int(time[:2])
     minutes = int(time[-2:])
     return 60 * hours + minutes
 
 
-def get_modified_time(time, modif):
-    total = get_minutes_from_time(time) + modif
-    hours = total // 60
-    minutes = total % 60
+def time_by_coefficient(row):
+    """
+    inputs
+    row: a row from the dataset
+    outputs
+    the time as a string hh:mm
+    """
+    coefficient = int(row["coefficient"])
+    time = get_minutes_from_time(row["heure"])
+    delta = 0
+    if coefficient > 0 and coefficient <= 40:
+        delta = -30
+    elif coefficient > 40 and coefficient <= 60:
+        delta = -15
+    elif coefficient > 60 and coefficient < 80:
+        delta = 0
+    elif coefficient >= 80 and coefficient < 90:
+        delta = 15
+    elif coefficient >= 90 and coefficient < 100:
+        delta = 30
+    elif coefficient >= 100 and coefficient < 110:
+        delta = 45
+    elif coefficient >= 110:
+        delta = 60
+    else:
+        return "ERROR could not compute hour"
+    time = time + delta
+    hours = time // 60
+    minutes = time % 60
     return f"{hours:02}:{minutes:02}"
 
 
-def hour_by_coeff(row):
-    coefficient = int(row["coefficient"])
-    hour = row["heure"]
-    if coefficient > 0 and coefficient <= 40:
-        return get_modified_time(hour, -30)
-    elif coefficient > 40 and coefficient <= 60:
-        return get_modified_time(hour, -15)
-    elif coefficient > 60 and coefficient < 80:
-        return get_modified_time(hour, 0)
-    elif coefficient >= 80 and coefficient < 90:
-        return get_modified_time(hour, 15)
-    elif coefficient >= 90 and coefficient < 100:
-        return get_modified_time(hour, 30)
-    elif coefficient >= 100 and coefficient < 110:
-        return get_modified_time(hour, 45)
-    elif coefficient >= 110:
-        return get_modified_time(hour, 60)
-    else:
-        return "ERROR could not compute hour"
-
-
 def is_night_hour(row):
-    # heure de sortie>=lever du soleil - TIME(0;15;0)
-    # and
-    # heure de sortie<=coucher du soleil - TIME(0;45;0)
-    # "OK"; "NUIT"
+    """
+    return if time is at night or the time
+    """
     sunrise = get_minutes_from_time(row["lever du soleil"])
     sunset = get_minutes_from_time(row["coucher du soleil"])
     sortie = get_minutes_from_time(row["heure de sortie"])
@@ -178,7 +187,7 @@ def is_night_hour(row):
         return "NUIT"
 
 
-df["heure de sortie"] = df.apply(hour_by_coeff, axis=1)
+df["heure de sortie"] = df.apply(time_by_coefficient, axis=1)
 df["heure de sortie"] = df.apply(is_night_hour, axis=1)
 
 
