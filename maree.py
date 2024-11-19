@@ -6,18 +6,12 @@ from io import StringIO
 import locale
 import json
 
-locale.setlocale(locale.LC_ALL, "fr_FR")
-# Définir les dates
-start_date = datetime(2025, 1, 1)
-end_date = datetime(2025, 12, 31)
-delta = timedelta(days=1)
 
-
-def get_sun_times(start, end):
-    gps_lat = "50.216569"
-    gps_lng = "1.624047"
-    timezone = "CET"
-    params = {
+def get_sun_times(start_date: datetime, end_date: datetime) -> list:
+    gps_lat: str = "50.216569"
+    gps_lng: str = "1.624047"
+    timezone: str = "CET"
+    params: dict = {
         "lat": gps_lat,
         "lng": gps_lng,
         "timezone": timezone,
@@ -27,67 +21,85 @@ def get_sun_times(start, end):
     }
 
     # get the sunrise and sunset time
-    timeurl = "https://api.sunrisesunset.io/json"
-    response = requests.get(timeurl, params=params)
+    timeurl: str = "https://api.sunrisesunset.io/json"
+    response: requests.Response = requests.get(timeurl, params=params)
+    if response.status_code != 200:
+        print("error while requesting sun times")
+        exit(-200)
     res = json.loads(response.content)
+    print("sun times recieved")
     return res["results"]
 
 
-sun_times = get_sun_times(start_date, end_date)
+def get_tide_data(start_date: datetime, end_date: datetime) -> pd.DataFrame:
+    with open("cookie.txt", "r") as cookietxt:
+        cookie: str = cookietxt.read()[:-1]
 
-with open("cookie.txt", "r") as cookietxt:
-    cookie = cookietxt.read()[:-1]
+    # Set headers manually
+    tide_headers = {
+        "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "Cookie": cookie,
+    }
 
-# Set headers manually
-tide_headers = {
-    "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.5",
-    "Accept-Encoding": "gzip, deflate, br, zstd",
-    "Cookie": cookie,
-}
+    delta = timedelta(days=7)
+    df_html_tables: list = []
 
-# Initialiser la liste des données
-tide_dics = []
+    # Get the tide info by weeks and join them
+    current_date: datetime = start_date
+    while current_date <= end_date:
+        # Récupérer la page web pour le jour actuel (URL et méthode d'accès à ajuster selon le site)
+        tide_params: dict = {"d": current_date.strftime("%Y%m%d")}
+        tide_url: str = "https://maree.info/150"
+        response: requests.Response = requests.get(
+            tide_url, headers=tide_headers, params=tide_params
+        )
 
-# Boucle sur chaque jour de l'année
-current_date = start_date
-while current_date <= end_date:
-    # Récupérer la page web pour le jour actuel (URL et méthode d'accès à ajuster selon le site)
-    tide_params = {"d": current_date.strftime("%Y%m%d")}
-    tide_url = "https://maree.info/150"
-    response = requests.get(tide_url, headers=tide_headers, params=tide_params)
+        soup = BeautifulSoup(response.content, "html.parser")
 
-    soup = BeautifulSoup(response.content, "html.parser")
+        for tide in soup.find_all(id="MareeJours"):
+            string_table = StringIO(str(tide))
+            df_html_table: pd.DataFrame = pd.read_html(string_table)[0]
 
-    for tide in soup.find_all(id="MareeJours"):
-        string_table = StringIO(str(tide))
-        df_html_table = pd.read_html(string_table)[0]
-
-    # handle week with "Changement d'heure" ignore the row
-    if len(df_html_table.values) > 7:
+        # ingore week/rows with "Changement d'heure"
         df_html_table.drop(
             df_html_table[df_html_table["Date"].str.contains("Changement")].index,
             inplace=True,
         )
 
+        df_html_tables.append(df_html_table)
+
+        current_date += delta
+        print(current_date)
+    return pd.concat(df_html_tables, ignore_index=True)
+
+
+def join_tide_sun_data(
+    start_date: datetime,
+    end_date: datetime,
+    df_year_tides: pd.DataFrame,
+    year_sun_times: list,
+) -> pd.DataFrame:
+    tide_dics: list[dict] = []
     # iter on rows of week
-    for row, sun_time in zip(df_html_table.iterrows(), sun_times):
-        date = current_date.strftime("%A %d %B %Y")
-        # as df_html_table is 7 days, it can oveshoot by up to 6 days
-        if current_date > end_date:
-            break
+    current_date: datetime = start_date
+    delta = timedelta(days=1)
+    for row, sun_time in zip(df_year_tides.iterrows(), year_sun_times):
+        # Compute a date like "Name_of_the_day DD Name_of_the_month YYYY"
+        date: str = current_date.strftime("%A %d %B %Y")
 
         values = row[1].to_numpy()
         _, hours, heights, coefficients = values
         # print(date)
 
-        heights = heights.split(" ")
-        hours = hours.replace("h", ":").split(" ")
-        coefficients = list(filter(lambda x: len(x) > 0, coefficients.split(" ")))
+        heights: list[str] = heights.split(" ")
+        hours: list[str] = hours.replace("h", ":").split(" ")
+        coefficients: list[str] = list(filter(lambda x: len(x) > 0, coefficients.split(" ")))
 
         # print(heights)
-        number_heigts = list(map(lambda x: float(x[:-1].replace(",", ".")), heights))
+        number_heigts: list[float] = list(map(lambda x: float(x[:-1].replace(",", ".")), heights))
         if number_heigts[0] > number_heigts[1]:
             # high tide first
             coefficients.insert(1, "")
@@ -100,15 +112,15 @@ while current_date <= end_date:
         sunrise, sunset = sun_time["sunrise"][:-3], sun_time["sunset"][:-3]
         # print(sunrise, sunset)
 
-        day = []
+        day: list[dict] = []
         for hour, height, coefficient in zip(hours, heights, coefficients):
             # add sunrise and sunset time
             # tide = (date, hour, height, coefficient, sunrise, sunset)
-            tide = {
+            tide: dict = {
                 "date": date,
-                "heure": hour,
-                "hauteur": height,
                 "coefficient": coefficient,
+                "hauteur": height,
+                "pleine mer": hour,
                 "lever du soleil": sunrise,
                 "coucher du soleil": sunset,
             }
@@ -119,17 +131,10 @@ while current_date <= end_date:
 
         tide_dics.extend(day)
         current_date += delta
-    # remove the 7 first elements consumed by last loop
-    sun_times = sun_times[6:]
-    print(current_date)
+    return pd.DataFrame(tide_dics)
 
 
-# Exporter vers Excel
-df = pd.DataFrame(tide_dics)
-# print(df)
-
-
-def get_minutes_from_time(time):
+def get_minutes_from_time(time: str) -> int:
     """
     inputs
     time is a string hh:mm
@@ -141,16 +146,19 @@ def get_minutes_from_time(time):
     return 60 * hours + minutes
 
 
-def time_by_coefficient(row):
+def time_by_coefficient_at_day(row: pd.Series):
     """
     inputs
     row: a row from the dataset
     outputs
-    the time as a string hh:mm
+    the time as a string hh:mm or "NUIT"
     """
+    sunrise: int = get_minutes_from_time(row["lever du soleil"])
+    sunset: int = get_minutes_from_time(row["coucher du soleil"])
+    time: int = get_minutes_from_time(row["pleine mer"])
     coefficient = int(row["coefficient"])
-    time = get_minutes_from_time(row["heure"])
-    delta = 0
+    delta: int = 0
+
     if coefficient > 0 and coefficient <= 40:
         delta = -30
     elif coefficient > 40 and coefficient <= 60:
@@ -167,28 +175,36 @@ def time_by_coefficient(row):
         delta = 60
     else:
         return "ERROR could not compute hour"
+
     time = time + delta
-    hours = time // 60
-    minutes = time % 60
-    return f"{hours:02}:{minutes:02}"
+    hours: int = time // 60
+    minutes: int = time % 60
 
-
-def is_night_hour(row):
-    """
-    return if time is at night or the time
-    """
-    sunrise = get_minutes_from_time(row["lever du soleil"])
-    sunset = get_minutes_from_time(row["coucher du soleil"])
-    sortie = get_minutes_from_time(row["heure de sortie"])
-
-    if sortie >= sunrise - 15 and sortie <= sunset - 45:
-        return row["heure de sortie"]
+    # return time if at day else night
+    if time >= sunrise - 15 and time <= sunset - 45:
+        return f"{hours:02}:{minutes:02}"
     else:
         return "NUIT"
 
 
-df["heure de sortie"] = df.apply(time_by_coefficient, axis=1)
-df["heure de sortie"] = df.apply(is_night_hour, axis=1)
+output_filename: str = "marees_le_crotoy_2025-no-night.xlsx"
+locale.setlocale(locale.LC_ALL, "fr_FR")
+# Définir les dates
+start_date: datetime = datetime(2025, 1, 1)
+end_date: datetime = datetime(2025, 12, 31)
 
+sun_times: list = get_sun_times(start_date, end_date)
 
-df.to_excel("marees_le_crotoy_2025.xlsx", index=False)
+joined_tide_tables: pd.DataFrame = get_tide_data(start_date, end_date)
+
+df: pd.DataFrame = join_tide_sun_data(start_date, end_date, joined_tide_tables, sun_times)
+
+df["heure de sortie"] = df.apply(time_by_coefficient_at_day, axis=1)
+# df.drop(df[df["heure de sortie"] == "NUIT"].index, inplace=True)
+
+new_order: list[str] = df.columns.to_list()
+exit_time: str = new_order.pop()
+new_order.insert(1, exit_time)
+
+df = df[new_order]
+df.to_excel(output_filename, index=False)
