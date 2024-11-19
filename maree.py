@@ -44,7 +44,7 @@ def get_tide_data(start_date: datetime, end_date: datetime) -> pd.DataFrame:
         "Cookie": cookie,
     }
 
-    delta = timedelta(days=7)
+    delta: timedelta = timedelta(days=7)
     df_html_tables: list = []
 
     # Get the tide info by weeks and join them
@@ -85,7 +85,7 @@ def join_tide_sun_data(
     tide_dics: list[dict] = []
     # iter on rows of week
     current_date: datetime = start_date
-    delta = timedelta(days=1)
+    delta: timedelta = timedelta(days=1)
     for row, sun_time in zip(df_year_tides.iterrows(), year_sun_times):
         # Compute a date like "Name_of_the_day DD Name_of_the_month YYYY"
         date: str = current_date.strftime("%A %d %B %Y")
@@ -187,7 +187,7 @@ def time_by_coefficient_at_day(row: pd.Series):
         return "NUIT"
 
 
-output_filename: str = "marees_le_crotoy_2025-no-night.xlsx"
+output_filename: str = "marees_le_crotoy_2025.xlsx"
 locale.setlocale(locale.LC_ALL, "fr_FR")
 # Définir les dates
 start_date: datetime = datetime(2025, 1, 1)
