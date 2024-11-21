@@ -32,16 +32,12 @@ def get_sun_times(start_date: datetime, end_date: datetime) -> list:
 
 
 def get_tide_data(start_date: datetime, end_date: datetime) -> pd.DataFrame:
-    with open("cookie.txt", "r") as cookietxt:
-        cookie: str = cookietxt.read()[:-1]
-
-    # Set headers manually
     tide_headers = {
         "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.5",
         "Accept-Encoding": "gzip, deflate, br, zstd",
-        "Cookie": cookie,
+        "Cookie": "UserAgreement=cf60bb9aab1a573ca00bf3d30f1026bede914adc7cbea51c4cb762f729b66eed270d7376; PHPSESSID=o93rg22kcf4varpc7nasktfes1",
     }
 
     delta: timedelta = timedelta(days=7)
