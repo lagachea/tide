@@ -1,3 +1,15 @@
+#!/usr/bin/env -S uv run
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+# "beautifulsoup4",
+# "pandas",
+# "requests",
+# "lxml",
+# "html5lib",
+# "openpyxl"
+# ]
+# ///
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
