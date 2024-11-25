@@ -92,10 +92,14 @@ def join_tide_sun_data(
 
         heights: list[str] = heights.split(" ")
         hours: list[str] = hours.replace("h", ":").split(" ")
-        coefficients: list[str] = list(filter(lambda x: len(x) > 0, coefficients.split(" ")))
+        coefficients: list[str] = list(
+            filter(lambda x: len(x) > 0, coefficients.split(" "))
+        )
 
         # print(heights)
-        number_heigts: list[float] = list(map(lambda x: float(x[:-1].replace(",", ".")), heights))
+        number_heigts: list[float] = list(
+            map(lambda x: float(x[:-1].replace(",", ".")), heights)
+        )
         if number_heigts[0] > number_heigts[1]:
             # high tide first
             coefficients.insert(1, "")
@@ -175,6 +179,13 @@ def time_by_coefficient_at_day(row: pd.Series):
     time = time + delta
     hours: int = time // 60
     minutes: int = time % 60
+    minutes_rest: int = time % 5
+
+    # rounds up the minutes to 5
+    minutes -= minutes_rest
+    if minutes_rest >= 3:
+        minutes += 5
+        
 
     # return time if at day else night
     if time >= sunrise - 15 and time <= sunset - 45:
@@ -193,7 +204,9 @@ sun_times: list = get_sun_times(start_date, end_date)
 
 joined_tide_tables: pd.DataFrame = get_tide_data(start_date, end_date)
 
-df: pd.DataFrame = join_tide_sun_data(start_date, end_date, joined_tide_tables, sun_times)
+df: pd.DataFrame = join_tide_sun_data(
+    start_date, end_date, joined_tide_tables, sun_times
+)
 
 df["heure de sortie"] = df.apply(time_by_coefficient_at_day, axis=1)
 # df.drop(df[df["heure de sortie"] == "NUIT"].index, inplace=True)
@@ -203,4 +216,8 @@ exit_time: str = new_order.pop()
 new_order.insert(1, exit_time)
 
 df = df[new_order]
+
+# Keep one "NUIT" per day
+df = df[~((df["heure de sortie"] == "NUIT") & df.duplicated(subset="date"))]
+
 df.to_excel(output_filename, index=False)
