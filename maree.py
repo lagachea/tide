@@ -1,3 +1,4 @@
+from flask import Flask
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
@@ -5,6 +6,8 @@ from datetime import datetime, timedelta
 from io import StringIO
 import locale
 import json
+
+locale.setlocale(locale.LC_ALL, "fr_FR.UTF-8")
 
 
 def get_sun_times(start_date: datetime, end_date: datetime) -> list:
@@ -185,7 +188,6 @@ def time_by_coefficient_at_day(row: pd.Series):
     minutes -= minutes_rest
     if minutes_rest >= 3:
         minutes += 5
-        
 
     # return time if at day else night
     if time >= sunrise - 15 and time <= sunset - 45:
@@ -194,30 +196,48 @@ def time_by_coefficient_at_day(row: pd.Series):
         return "NUIT"
 
 
-output_filename: str = "marees_le_crotoy_2025.xlsx"
-locale.setlocale(locale.LC_ALL, "fr_FR")
-# Définir les dates
-start_date: datetime = datetime(2025, 1, 1)
-end_date: datetime = datetime(2025, 12, 31)
+def write_df_to_excel(df: pd.DataFrame) -> None:
+    output_filename: str = "marees_le_crotoy_2025.xlsx"
+    df.to_excel(output_filename, index=False)
 
-sun_times: list = get_sun_times(start_date, end_date)
 
-joined_tide_tables: pd.DataFrame = get_tide_data(start_date, end_date)
+def reorder_df_columns(df: pd.DataFrame) -> pd.DataFrame:
+    new_order: list[str] = df.columns.to_list()
+    exit_time: str = new_order.pop()
+    new_order.insert(1, exit_time)
+    return df[new_order]
 
-df: pd.DataFrame = join_tide_sun_data(
-    start_date, end_date, joined_tide_tables, sun_times
-)
 
-df["heure de sortie"] = df.apply(time_by_coefficient_at_day, axis=1)
-# df.drop(df[df["heure de sortie"] == "NUIT"].index, inplace=True)
+def get_tide_dataframe() -> pd.DataFrame:
+    start_date: datetime = datetime(2025, 1, 1)
+    end_date: datetime = datetime(2025, 12, 31)
 
-new_order: list[str] = df.columns.to_list()
-exit_time: str = new_order.pop()
-new_order.insert(1, exit_time)
+    sun_times: list = get_sun_times(start_date, end_date)
 
-df = df[new_order]
+    joined_tide_tables: pd.DataFrame = get_tide_data(start_date, end_date)
 
-# Keep one "NUIT" per day
-df = df[~((df["heure de sortie"] == "NUIT") & df.duplicated(subset="date"))]
+    df: pd.DataFrame = join_tide_sun_data(
+        start_date, end_date, joined_tide_tables, sun_times
+    )
 
-df.to_excel(output_filename, index=False)
+    df["heure de sortie"] = df.apply(time_by_coefficient_at_day, axis=1)
+
+    df = reorder_df_columns(df)
+
+    # Keep one "NUIT" per day
+    df = df[~((df["heure de sortie"] == "NUIT") & df.duplicated(subset="date"))]
+    return df
+
+
+app = Flask(__name__)
+
+
+@app.route("/")
+def hello_world():
+    df = get_tide_dataframe()
+    return df.to_html(index=False)
+
+
+if __name__ == "__main__":
+    df = get_tide_dataframe()
+    # write_df_to_excel(df)

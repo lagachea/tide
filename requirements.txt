@@ -4,3 +4,4 @@ requests
 lxml
 html5lib
 openpyxl
+flask
